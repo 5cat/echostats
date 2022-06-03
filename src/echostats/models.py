@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import ipaddress
 import uuid
+from datetime import datetime as datetime_class
 from datetime import timedelta
 from enum import Enum
 from typing import Any
@@ -8,6 +11,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import StrictBytes
+from pydantic import StrictStr
 from pydantic import validator
 
 
@@ -76,11 +81,6 @@ class Pause(BaseModel):
     @validator("paused_state", "unpaused_team", "paused_requested_team", pre=True)
     def __convert_str_none_into_none(cls, v: Optional[str]) -> Optional[str]:
         return None if v == "none" else v
-
-
-class Possession(BaseModel):
-    team: Optional[TeamEnum]
-    player: Optional[Literal[0, 1, 2, 3, 4]]
 
 
 class Throw(BaseModel):
@@ -185,6 +185,11 @@ class Player(BaseModel):
         return {"x": v[0], "y": v[1], "z": v[2]}
 
 
+class Possession(BaseModel):
+    team: Optional[int]
+    player: Optional[int]
+
+
 class Team(BaseModel):
     name: str = Field(alias="team")
     possession: Optional[bool]
@@ -229,8 +234,6 @@ class EchoEvent(BaseModel):
 
     pause: Optional[Pause]
 
-    possession: Optional[Any]
-
     last_throw: Optional[Throw]
 
     last_score: Optional[LastScore]
@@ -241,6 +244,8 @@ class EchoEvent(BaseModel):
 
     teams: list[Team]
 
+    possession: Optional[Possession]
+
     err_description: Optional[str]
     err_code: Optional[int]
 
@@ -249,20 +254,14 @@ class EchoEvent(BaseModel):
         return None if v == "" else v
 
     @validator("possession", pre=True)
-    def __parse_possession(cls, v: Optional[tuple[int, int]]) -> Optional[Possession]:
+    def __parse_possession(cls, v: Optional[tuple[int, int]]) -> Optional[dict]:
         if v is None:
             return v
         team, player = v
-        if team == -1:
-            team_parsed = None
-        elif team == 0:
-            team_parsed = TeamEnum.BLUE
-        elif team == 1:
-            team_parsed = TeamEnum.ORANGE
-        else:
-            raise ValueError(f"did not expect {team=}")
-
-        return Possession(team=team_parsed, player=None if player == -1 else player)
+        return {
+            "team": None if team == -1 else team,
+            "player": None if player == -1 else player,
+        }
 
     @validator("last_score", pre=True)
     def __remove_if_there_is_no_last_goal(cls, v: Optional[dict]) -> Optional[dict]:
@@ -286,3 +285,17 @@ class EchoEvent(BaseModel):
     @validator("err_code", pre=True)
     def __remove_if_is_equal_to_zero(cls, v: Optional[int]) -> Optional[int]:
         return None if v == 0 else v
+
+
+class StreamEvent(BaseModel):
+    data: StrictStr | StrictBytes
+    datetime: datetime_class = Field(
+        default_factory=lambda: datetime_class.now().isoformat(
+            sep=" ", timespec="milliseconds"
+        )
+    )
+
+
+class ConsumerEvent(BaseModel):
+    stream_event: StreamEvent
+    echo_event: EchoEvent
