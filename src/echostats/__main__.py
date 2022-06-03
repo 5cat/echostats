@@ -1,5 +1,6 @@
 import click
-from echostats.streamer import OnlineStreamer, FileStreamer
+from echostats.streamer import FileStreamer
+from echostats.streamer import OnlineStreamer
 
 
 @click.group()

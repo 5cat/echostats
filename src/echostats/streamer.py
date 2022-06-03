@@ -1,14 +1,14 @@
+import json
+import time
 import zipfile
+from abc import ABC
+from abc import abstractmethod
+from pprint import pprint
 from typing import Generator
 
 import pydantic
 import requests
-import time
-
 from echostats.models import EchoEvent
-from abc import ABC, abstractmethod
-from pprint import pprint
-import json
 
 
 class BaseStreamer(ABC):
