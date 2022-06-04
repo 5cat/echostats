@@ -26,7 +26,9 @@ class BaseStreamer(ABC):
                     stack.enter_context(conti)
             for stream_event in self.read():
                 echo_event = EchoEvent.parse_raw(stream_event.data)
-                event = ConsumerEvent(stream_event=stream_event, echo_event=echo_event)
+                event = ConsumerEvent.construct(
+                    stream_event=stream_event, echo_event=echo_event
+                )
                 for consumer in consumers:
                     consumer.consume(event)
 
