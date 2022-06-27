@@ -1,5 +1,5 @@
-from . import BaseConsumer
-from ..models import ConsumerEvent
+from echostats._abc import BaseConsumer
+from echostats.models import ConsumerEvent
 
 
 class DebuggerConsumer(BaseConsumer):

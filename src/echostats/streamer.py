@@ -1,14 +1,15 @@
-import os.path
 import time
 import zipfile
 from abc import ABC
 from abc import abstractmethod
 from contextlib import ExitStack
 from typing import Generator
+from typing import Iterable
 
-import pydantic
 import requests
-from echostats.consumers import BaseConsumer
+from echostats._abc import BaseConsumer
+from echostats._abc import ConsumerDependent
+from echostats._abc import ConsumerMapping
 from echostats.models import ConsumerEvent
 from echostats.models import EchoEvent
 from echostats.models import StreamEvent
@@ -19,7 +20,7 @@ class BaseStreamer(ABC):
     def read(self) -> Generator[StreamEvent, None, None]:
         ...
 
-    def consume(self, consumers: list[BaseConsumer]):
+    def consume(self, consumers: Iterable[BaseConsumer]):
         with ExitStack() as stack:
             for consumer in consumers:
                 for conti in consumer.get_context_managers():
@@ -31,6 +32,19 @@ class BaseStreamer(ABC):
                 )
                 for consumer in consumers:
                     consumer.consume(event)
+
+    def resolve(self, dependents: Iterable[ConsumerDependent]) -> ConsumerMapping:
+        consumer_dict = {}
+        for dependent in dependents:
+            for consumer_class in dependent.get_dependencies():
+                if consumer_class not in consumer_dict:
+                    consumer_dict[consumer_class] = consumer_class()
+
+        self.consume(consumer_dict.values())
+        safe_consumer_dict = ConsumerMapping(consumer_dict)
+        for dependent in dependents:
+            dependent.init(safe_consumer_dict)
+        return safe_consumer_dict
 
 
 class OnlineStreamer(BaseStreamer):

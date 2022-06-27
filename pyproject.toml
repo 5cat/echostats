@@ -24,6 +24,7 @@ jupyter-dash = "^0.4.2"
 pandas = "^1.4.2"
 ipywidgets = "^7.7.0"
 jupyterlab = "^3.4.2"
+mypy = "^0.961"
 
 [tool.poetry.scripts]
 echostats = "echostats:__main__"

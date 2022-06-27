@@ -1,9 +1,20 @@
-from echostats.consumers import BaseConsumer
+import os
+from typing import Iterable
+from typing import Literal
+from typing import Type
+
+import plotly.express as xp
+import plotly.graph_objects as go
+from echostats._abc import BaseConsumer
+from echostats._abc import BaseGrapher
+from echostats._abc import ConsumerDependent
+from echostats._abc import ConsumerMapping
 from echostats.models import ConsumerEvent
 from echostats.models import Disc
 from echostats.models import EchoEvent
 from echostats.models import GameStatus
 from echostats.models import Vector3D
+from PIL import Image
 
 
 class GoalsConsumer(BaseConsumer):
@@ -57,6 +68,46 @@ class GoalsConsumer(BaseConsumer):
         return self._blue_goals
 
 
+class GoalsGrapher(BaseGrapher, ConsumerDependent):
+    def __init__(self, team: Literal["blue", "orange"]):
+        self.team = team
+
+    def get_dependencies(self) -> Iterable[Type[BaseConsumer]]:
+        return (GoalsConsumer,)
+
+    def init(self, dependencies: ConsumerMapping) -> None:
+        self.goals_consumer = dependencies[GoalsConsumer]
+
+    def generate_figure(self) -> go.Figure:
+        if self.team == "blue":
+            goals = self.goals_consumer.blue_goals
+            color = "blue"
+        else:
+            goals = self.goals_consumer.orange_goals
+            color = "orange"
+
+        if len(goals) > 0:
+            fig = xp.scatter(x=[i.x for i in goals], y=[i.y for i in goals])
+        else:
+            fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=[-1.5, 0, 1.5, 0, -1.5],
+                y=[0, 1.5, 0, -1.5, 0],
+                fill="toself",
+                marker=dict(color=color),
+            )
+        )
+        fig.update_yaxes(
+            scaleanchor="x",
+            scaleratio=1,
+        )
+        fig.update_layout(
+            showlegend=False,
+        )
+        return fig
+
+
 class DiscPlayingConsumer(BaseConsumer):
     def __init__(self):
         self._disc_positions: list[Disc] = []
@@ -71,3 +122,50 @@ class DiscPlayingConsumer(BaseConsumer):
     @property
     def disc_positions(self) -> list[Disc]:
         return [i.copy() for i in self._disc_positions]
+
+
+app_path = os.path.dirname(os.path.abspath(__file__))
+
+
+class DiscPlayingGrapher(BaseGrapher, ConsumerDependent):
+    def get_dependencies(self) -> Iterable[Type[BaseConsumer]]:
+        return (DiscPlayingConsumer,)
+
+    def init(self, dependencies: ConsumerMapping) -> None:
+        self.disc_playing_consumer = dependencies[DiscPlayingConsumer]
+
+    def generate_figure(self) -> go.Figure:
+        discs = self.disc_playing_consumer.disc_positions
+        fig = go.Figure()
+        fig.add_scatter(
+            x=[i.position.z for i in discs],
+            y=[i.position.x for i in discs],
+            mode="lines+markers",
+        )
+        fig.update_yaxes(
+            scaleanchor="x",
+            scaleratio=1,
+        )
+        y = 16
+        fig.add_layout_image(
+            dict(
+                source=Image.open(
+                    os.path.join(
+                        app_path, "../assets/sean-ian-runnels-echo-arena-003.png"
+                    )
+                ),
+                xref="x",
+                yref="y",
+                x=-40,
+                y=y,
+                sizex=80,
+                sizey=y * 2,
+                sizing="stretch",
+                opacity=0.5,
+                layer="below",
+            )
+        )
+
+        # Set templates
+        fig.update_layout(template="plotly_white")
+        return fig
