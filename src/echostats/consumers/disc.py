@@ -1,9 +1,10 @@
 import os
 from typing import Iterable
-from typing import Literal
+from typing import Optional
 from typing import Type
+from typing import TypedDict
 
-import plotly.express as xp
+import pandas as pd
 import plotly.graph_objects as go
 from echostats._abc import BaseConsumer
 from echostats._abc import BaseGrapher
@@ -13,8 +14,10 @@ from echostats.models import ConsumerEvent
 from echostats.models import Disc
 from echostats.models import EchoEvent
 from echostats.models import GameStatus
+from echostats.models import Player
 from echostats.models import Vector3D
 from PIL import Image
+from plotly.subplots import make_subplots
 
 
 class GoalsConsumer(BaseConsumer):
@@ -69,58 +72,126 @@ class GoalsConsumer(BaseConsumer):
 
 
 class GoalsGrapher(BaseGrapher, ConsumerDependent):
-    def __init__(self, team: Literal["blue", "orange"]):
-        self.team = team
-
     def get_dependencies(self) -> Iterable[Type[BaseConsumer]]:
         return (GoalsConsumer,)
 
     def init(self, dependencies: ConsumerMapping) -> None:
         self.goals_consumer = dependencies[GoalsConsumer]
 
-    def generate_figure(self) -> go.Figure:
-        if self.team == "blue":
-            goals = self.goals_consumer.blue_goals
-            color = "blue"
-        else:
-            goals = self.goals_consumer.orange_goals
-            color = "orange"
-
+    def create_per_team_plot(
+        self, goals: list[Vector3D], color: str, fig: go.Figure, row: int, col: int
+    ) -> go.Figure:
         if len(goals) > 0:
-            fig = xp.scatter(x=[i.x for i in goals], y=[i.y for i in goals])
-        else:
-            fig = go.Figure()
+            fig.add_scatter(
+                x=[i.x for i in goals],
+                y=[i.y for i in goals],
+                marker=dict(color="white", symbol="x", size=15),
+                mode="markers",
+                row=row,
+                col=col,
+            )
         fig.add_trace(
             go.Scatter(
                 x=[-1.5, 0, 1.5, 0, -1.5],
                 y=[0, 1.5, 0, -1.5, 0],
                 fill="toself",
                 marker=dict(color=color),
-            )
+                hovertext="skip",
+            ),
+            row=row,
+            col=col,
         )
         fig.update_yaxes(
+            visible=False,
             scaleanchor="x",
             scaleratio=1,
+            row=row,
+            col=col,
         )
+        fig.update_xaxes(
+            visible=False,
+            scaleanchor="y",
+            scaleratio=1,
+            row=row,
+            col=col,
+        )
+        return fig
+
+    def generate_figure(self) -> go.Figure:
+        fig = make_subplots(
+            rows=1,
+            cols=2,
+            subplot_titles=("Goals on Orange", "Goals on Blue"),
+            specs=[[{"type": "scatter"}, {"type": "scatter"}]],
+        )
+        self.create_per_team_plot(
+            self.goals_consumer.blue_goals,
+            color="orange",
+            fig=fig,
+            row=1,
+            col=1,
+        )
+
+        self.create_per_team_plot(
+            self.goals_consumer.orange_goals,
+            color="blue",
+            fig=fig,
+            row=1,
+            col=2,
+        )
+
         fig.update_layout(
+            xaxis_showgrid=False,
+            yaxis_showgrid=False,
+            xaxis_zeroline=False,
+            yaxis_zeroline=False,
             showlegend=False,
+            title_text="Goal Positions",
         )
         return fig
 
 
+class DiscPlayingStruct(TypedDict):
+    disc: Disc
+    player_name: Optional[str]
+    team_name: Optional[str]
+
+
 class DiscPlayingConsumer(BaseConsumer):
     def __init__(self):
-        self._disc_positions: list[Disc] = []
+        self._disc_positions = []
 
     def consume(self, event: ConsumerEvent) -> None:
         match event.echo_event:
             case EchoEvent(
                 game_status=GameStatus.PLAYING,
             ):
-                self._disc_positions.append(event.echo_event.disc)
+                if event.echo_event.disc is not None:
+                    poss = event.echo_event.possession
+                    if (
+                        poss is not None
+                        and poss.team is not None
+                        and poss.player is not None
+                    ):
+                        team = event.echo_event.teams[poss.team]
+                        player_name = team.players[poss.player].name
+                        team_name = {"BLUE TEAM": "blue", "ORANGE TEAM": "orange"}[
+                            team.name
+                        ]
+                    else:
+                        player_name = None
+                        team_name = None
+
+                    self._disc_positions.append(
+                        DiscPlayingStruct(
+                            disc=event.echo_event.disc,
+                            player_name=player_name,
+                            team_name=team_name,
+                        )
+                    )
 
     @property
-    def disc_positions(self) -> list[Disc]:
+    def disc_positions(self) -> list[DiscPlayingStruct]:
         return [i.copy() for i in self._disc_positions]
 
 
@@ -135,11 +206,12 @@ class DiscPlayingGrapher(BaseGrapher, ConsumerDependent):
         self.disc_playing_consumer = dependencies[DiscPlayingConsumer]
 
     def generate_figure(self) -> go.Figure:
-        discs = self.disc_playing_consumer.disc_positions
+        discs_struct = self.disc_playing_consumer.disc_positions
         fig = go.Figure()
+
         fig.add_scatter(
-            x=[i.position.z for i in discs],
-            y=[i.position.x for i in discs],
+            x=[i["disc"].position.z for i in discs_struct],
+            y=[i["disc"].position.x for i in discs_struct],
             mode="lines+markers",
         )
         fig.update_yaxes(
@@ -166,6 +238,21 @@ class DiscPlayingGrapher(BaseGrapher, ConsumerDependent):
             )
         )
 
+        fig.update_yaxes(
+            visible=False,
+            range=(-16, 16),
+        )
+        fig.update_xaxes(
+            visible=False,
+            range=(-40, 40),
+        )
+
         # Set templates
-        fig.update_layout(template="plotly_white")
+        fig.update_layout(
+            xaxis_showgrid=False,
+            yaxis_showgrid=False,
+            xaxis_zeroline=False,
+            yaxis_zeroline=False,
+            template="plotly_white",
+        )
         return fig

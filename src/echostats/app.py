@@ -1,17 +1,11 @@
-# Run this app with `python app.py` and
-# visit http://127.0.0.1:8050/ in your web browser.
-import pandas as pd
-import plotly.express as px
 from dash import Dash
 from dash import dcc
 from dash import html
 from echostats import FileStreamer
-from echostats.consumers.disc import DiscPlayingConsumer
 from echostats.consumers.disc import DiscPlayingGrapher
-from echostats.consumers.disc import GoalsConsumer
 from echostats.consumers.disc import GoalsGrapher
-from echostats.consumers.player import PingConsumer
 from echostats.consumers.player import PingGrapher
+from echostats.consumers.player import PlayerDistanceNetworkGrapher
 from echostats.consumers.player import PlayerStatsGrapher
 
 app = Dash(__name__)
@@ -19,20 +13,20 @@ app = Dash(__name__)
 colors = {"background": "#111111", "text": "#7FDBFF"}
 
 
-streamer = FileStreamer("/media/SSD/echostats/test.echoarena")
+streamer = FileStreamer("/media/SSD/echostats/test2.echoarena")
 
-goals_grapher_blue = GoalsGrapher(team="blue")
-goals_grapher_orange = GoalsGrapher(team="orange")
+goals_grapher = GoalsGrapher()
 ping_grapher = PingGrapher()
 disc_playing_grapher = DiscPlayingGrapher()
 player_stats_grapher = PlayerStatsGrapher()
+player_distance_network_grapher = PlayerDistanceNetworkGrapher()
 streamer.resolve(
     [
-        goals_grapher_blue,
-        goals_grapher_orange,
+        goals_grapher,
         ping_grapher,
         disc_playing_grapher,
         player_stats_grapher,
+        player_distance_network_grapher,
     ]
 )
 
@@ -59,11 +53,7 @@ app.layout = html.Div(
         ),
         dcc.Graph(
             id="example-graph-2",
-            figure=fig_post_process(goals_grapher_blue.generate_figure()),
-        ),
-        dcc.Graph(
-            id="example-graph-3",
-            figure=fig_post_process(goals_grapher_orange.generate_figure()),
+            figure=fig_post_process(goals_grapher.generate_figure()),
         ),
         dcc.Graph(
             id="example-graph-4",
@@ -76,6 +66,10 @@ app.layout = html.Div(
         dcc.Graph(
             id="example-graph-6",
             figure=fig_post_process(player_stats_grapher.generate_figure()),
+        ),
+        dcc.Graph(
+            id="example-graph-7",
+            figure=fig_post_process(player_distance_network_grapher.generate_figure()),
         ),
     ],
 )
